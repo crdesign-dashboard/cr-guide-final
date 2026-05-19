@@ -686,7 +686,7 @@ export default function App() {
                 {[
                   ["소스 파일 경로", "/cr/2026_업무요청/케이뱅크/#소스/★로고\n/cr/2026_업무요청/케이뱅크/#소스/26.04_미성년"],
                   ["업로드 경로", "/cr/2026_업무요청/케이뱅크"],
-                  ["담당자", "박현 대리님 / 유가람 매니저님 / 임주희 매니저님\n문의: #design-ad"],
+                  ["담당자", "박현 대리님 / 유가람 매니저님 / 임주희 매니저님"],
                   ["브랜드 가이드", "https://brand.kbanknow.com/resource.html"]
                 ].map(([title, body]) => (
                   <div key={title} style={{ background: "#fff", border: "1px solid #E5E7EF", borderRadius: 10, padding: 16 }}>
