@@ -18,6 +18,7 @@ type MediaGuide = {
   psd_path?: string | null;
   official_link?: string | null;
   work_sample_path?: string | null;
+  work_sample_paths?: string[] | null;
   example_image_url?: string | null;
   example_image_urls?: string[] | null;
   updated_by?: string | null;
@@ -37,6 +38,7 @@ const emptyForm: MediaGuide = {
   psd_path: "",
   official_link: "",
   work_sample_path: "",
+  work_sample_paths: [],
   example_image_url: "",
   example_image_urls: [],
   updated_by: "",
@@ -56,6 +58,13 @@ function normalizeImageUrls(item: MediaGuide) {
   if (Array.isArray(item.example_image_urls)) urls.push(...item.example_image_urls.filter(Boolean));
   if (item.example_image_url && !urls.includes(item.example_image_url)) urls.unshift(item.example_image_url);
   return urls;
+}
+
+function normalizeWorkSamplePaths(item: MediaGuide) {
+  const paths: string[] = [];
+  if (Array.isArray(item.work_sample_paths)) paths.push(...item.work_sample_paths.filter(Boolean));
+  if (item.work_sample_path && !paths.includes(item.work_sample_path)) paths.unshift(item.work_sample_path);
+  return paths;
 }
 
 function copyText(value?: string | null) {
@@ -118,6 +127,7 @@ export default function App() {
         item.psd_path,
         item.official_link,
         item.work_sample_path,
+        ...(Array.isArray(item.work_sample_paths) ? item.work_sample_paths : []),
       ].join(" ").toLowerCase();
       const searchMatched = !keyword || searchTarget.includes(keyword);
       return groupMatched && searchMatched;
@@ -136,7 +146,7 @@ export default function App() {
 
   function openCreateModal() {
     setEditingItem(null);
-    setForm({ ...emptyForm, example_image_urls: [] });
+    setForm({ ...emptyForm, example_image_urls: [], work_sample_paths: [] });
     setModalOpen(true);
   }
 
@@ -154,6 +164,7 @@ export default function App() {
       psd_path: item.psd_path || "",
       official_link: item.official_link || "",
       work_sample_path: item.work_sample_path || "",
+      work_sample_paths: normalizeWorkSamplePaths(item),
       example_image_url: item.example_image_url || "",
       example_image_urls: normalizeImageUrls(item),
       updated_by: item.updated_by || "",
@@ -164,7 +175,7 @@ export default function App() {
   function closeModal() {
     setModalOpen(false);
     setEditingItem(null);
-    setForm({ ...emptyForm, example_image_urls: [] });
+    setForm({ ...emptyForm, example_image_urls: [], work_sample_paths: [] });
   }
 
   function updateForm(key: keyof MediaGuide, value: string | string[]) {
@@ -223,12 +234,36 @@ export default function App() {
     });
   }
 
+  function addWorkSamplePath() {
+    setForm((prev) => {
+      const current = Array.isArray(prev.work_sample_paths) ? prev.work_sample_paths : [];
+      return { ...prev, work_sample_paths: [...current, ""] };
+    });
+  }
+
+  function updateWorkSamplePath(index: number, value: string) {
+    setForm((prev) => {
+      const current = Array.isArray(prev.work_sample_paths) ? [...prev.work_sample_paths] : [];
+      current[index] = value;
+      return { ...prev, work_sample_paths: current };
+    });
+  }
+
+  function removeWorkSamplePath(index: number) {
+    setForm((prev) => {
+      const current = Array.isArray(prev.work_sample_paths) ? prev.work_sample_paths : [];
+      const next = current.filter((_, i) => i !== index);
+      return { ...prev, work_sample_paths: next, work_sample_path: next[0] || "" };
+    });
+  }
+
   async function saveItem() {
     if (!form.group_name.trim()) return alert("매체 그룹을 입력해줘.");
     if (!form.media_name.trim()) return alert("매체명을 입력해줘.");
 
     setSaving(true);
     const imageUrls = Array.isArray(form.example_image_urls) ? form.example_image_urls.filter(Boolean) : [];
+    const workSamplePaths = Array.isArray(form.work_sample_paths) ? form.work_sample_paths.map((v) => v.trim()).filter(Boolean) : [];
 
     const payload = {
       group_name: form.group_name.trim(),
@@ -241,7 +276,8 @@ export default function App() {
       warnings: form.warnings || null,
       psd_path: form.psd_path?.trim() || null,
       official_link: form.official_link?.trim() || null,
-      work_sample_path: form.work_sample_path?.trim() || null,
+      work_sample_path: workSamplePaths[0] || form.work_sample_path?.trim() || null,
+      work_sample_paths: workSamplePaths,
       example_image_url: imageUrls[0] || null,
       example_image_urls: imageUrls,
       updated_by: form.updated_by?.trim() || null,
@@ -323,6 +359,7 @@ export default function App() {
             <div style={styles.grid}>
               {filteredItems.map((item) => {
                 const imageUrls = normalizeImageUrls(item);
+                const workSamplePaths = normalizeWorkSamplePaths(item);
                 const opened = isCardOpen(item);
                 return (
                   <article key={item.id} style={styles.card}>
@@ -379,10 +416,14 @@ export default function App() {
                         <button style={styles.copyButton} onClick={() => copyText(item.psd_path)}>복사</button>
                       </section>}
 
-                      {item.work_sample_path && <section style={styles.linkBox}>
+                      {workSamplePaths.length > 0 && <section style={styles.pathListBox}>
                         <div style={styles.linkLabel}>작업 사례 경로</div>
-                        <span style={styles.pathText}>{item.work_sample_path}</span>
-                        <button style={styles.copyButton} onClick={() => copyText(item.work_sample_path)}>복사</button>
+                        {workSamplePaths.map((path, idx) => (
+                          <div key={`${path}-${idx}`} style={styles.pathListItem}>
+                            <span style={styles.pathText}>{path}</span>
+                            <button style={styles.copyButton} onClick={() => copyText(path)}>복사</button>
+                          </div>
+                        ))}
                       </section>}
 
                       <div style={styles.meta}>
@@ -421,8 +462,31 @@ export default function App() {
           <div style={styles.formGrid}>
             <label style={styles.label}>공식 가이드 링크<input style={styles.input} value={form.official_link || ""} onChange={(e) => updateForm("official_link", e.target.value)} placeholder="https://..." /></label>
             <label style={styles.label}>PSD / 템플릿 경로<input style={styles.input} value={form.psd_path || ""} onChange={(e) => updateForm("psd_path", e.target.value)} placeholder="/cr/공통_매체가이드/..." /></label>
-            <label style={styles.label}>작업 사례 경로<input style={styles.input} value={form.work_sample_path || ""} onChange={(e) => updateForm("work_sample_path", e.target.value)} placeholder="/cr/2026_업무요청/..." /></label>
             <label style={styles.label}>수정자<input style={styles.input} value={form.updated_by || ""} onChange={(e) => updateForm("updated_by", e.target.value)} placeholder="예: 송이" /></label>
+          </div>
+
+          <div style={styles.multiPathArea}>
+            <div style={styles.multiPathHeader}>
+              <div>
+                <div style={styles.uploadTitle}>작업 사례 경로</div>
+                <div style={styles.uploadDesc}>+ 버튼으로 이전 작업 경로를 여러 개 등록할 수 있어.</div>
+              </div>
+              <button type="button" style={styles.addPathButton} onClick={addWorkSamplePath}>+ 경로 추가</button>
+            </div>
+            {(!Array.isArray(form.work_sample_paths) || form.work_sample_paths.length === 0) && (
+              <button type="button" style={styles.emptyPathButton} onClick={addWorkSamplePath}>첫 작업 사례 경로 추가</button>
+            )}
+            {Array.isArray(form.work_sample_paths) && form.work_sample_paths.map((path, idx) => (
+              <div key={idx} style={styles.pathInputRow}>
+                <input
+                  style={styles.input}
+                  value={path}
+                  onChange={(e) => updateWorkSamplePath(idx, e.target.value)}
+                  placeholder="/cr/2026_업무요청/..."
+                />
+                <button type="button" style={styles.removePathButton} onClick={() => removeWorkSamplePath(idx)}>삭제</button>
+              </div>
+            ))}
           </div>
 
           <div style={styles.uploadArea}>
@@ -488,6 +552,73 @@ const styles: Record<string, React.CSSProperties> = {
   sectionTitleRed: { fontSize: 13, color: "#D62F2F", margin: "0 0 8px", fontWeight: 900 },
   list: { margin: 0, paddingLeft: 18, color: "#333", fontSize: 13, lineHeight: 1.8 },
   warningList: { margin: 0, paddingLeft: 18, color: "#C52020", fontSize: 13, lineHeight: 1.8 },
+
+  pathListBox: {
+    marginTop: 12,
+    border: "1px solid #E5E7EF",
+    borderRadius: 10,
+    padding: 10,
+    background: "#FAFBFF",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  pathListItem: {
+    display: "grid",
+    gridTemplateColumns: "1fr auto",
+    gap: 8,
+    alignItems: "center",
+  },
+  multiPathArea: {
+    marginTop: 16,
+    border: "1px solid #E5E7EF",
+    background: "#FAFBFF",
+    borderRadius: 12,
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  multiPathHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  addPathButton: {
+    border: "none",
+    borderRadius: 10,
+    background: "#0114A7",
+    color: "#fff",
+    fontWeight: 900,
+    padding: "9px 12px",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  emptyPathButton: {
+    border: "1px dashed #B8C2FF",
+    borderRadius: 10,
+    background: "#F4F6FF",
+    color: "#0114A7",
+    fontWeight: 900,
+    padding: "11px 12px",
+    cursor: "pointer",
+  },
+  pathInputRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr auto",
+    gap: 8,
+    alignItems: "center",
+  },
+  removePathButton: {
+    border: "1px solid #F3CCCC",
+    borderRadius: 10,
+    background: "#FFF5F5",
+    color: "#C52020",
+    fontWeight: 900,
+    padding: "10px 12px",
+    cursor: "pointer",
+  },
   linkBox: { marginTop: 12, border: "1px solid #E5E7EF", borderRadius: 10, padding: 10, background: "#FAFBFF", display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" },
   linkLabel: { gridColumn: "1 / -1", fontSize: 11, fontWeight: 900, color: "#888" },
   linkText: { fontSize: 12, color: "#0114A7", wordBreak: "break-all" },
