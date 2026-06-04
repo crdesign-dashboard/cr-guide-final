@@ -69,6 +69,7 @@ export default function App() {
   const [form, setForm] = useState<MediaGuide>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
   async function fetchItems() {
     setLoading(true);
@@ -118,10 +119,18 @@ export default function App() {
         .toLowerCase();
 
       const searchMatched = !keyword || searchTarget.includes(keyword);
-
       return groupMatched && searchMatched;
     });
   }, [items, activeGroup, search]);
+
+  function getItemKey(item: MediaGuide) {
+    return item.id || `${item.group_name}-${item.media_name}`;
+  }
+
+  function toggleExpanded(item: MediaGuide) {
+    const key = getItemKey(item);
+    setExpandedIds((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   function openCreateModal() {
     setEditingItem(null);
@@ -188,7 +197,6 @@ export default function App() {
     }
 
     const { data } = supabase.storage.from("guide-images").getPublicUrl(path);
-
     updateForm("example_image_url", data.publicUrl);
     setUploading(false);
   }
@@ -327,103 +335,130 @@ export default function App() {
             <div style={styles.empty}>등록된 매체가 없어. + 매체 추가로 등록해줘.</div>
           ) : (
             <div style={styles.grid}>
-              {filteredItems.map((item) => (
-                <article key={item.id} style={styles.card}>
-                  <div style={styles.cardTop}>
-                    <div>
-                      <span style={styles.badge}>{item.group_name}</span>
+              {filteredItems.map((item) => {
+                const itemKey = getItemKey(item);
+                const isExpanded = !!expandedIds[itemKey];
+                const guideCount = splitLines(item.guide).length;
+                const warningCount = splitLines(item.warnings).length;
+
+                return (
+                  <article key={itemKey} style={styles.card}>
+                    <div style={styles.cardTop}>
+                      <div style={styles.badgeArea}>
+                        <span style={styles.badge}>{item.group_name}</span>
+                        {item.example_image_url && <span style={styles.imageBadge}>예시 이미지</span>}
+                      </div>
+                      <div style={styles.cardActions}>
+                        <button style={styles.miniButton} onClick={() => openEditModal(item)}>
+                          수정
+                        </button>
+                        <button style={styles.miniButtonGray} onClick={() => toggleExpanded(item)}>
+                          {isExpanded ? "접기" : "보기"}
+                        </button>
+                      </div>
                     </div>
-                    <div style={styles.cardActions}>
-                      <button style={styles.miniButton} onClick={() => openEditModal(item)}>
-                        수정
-                      </button>
-                      <button style={styles.miniButtonGray} onClick={() => deleteItem(item)}>
-                        삭제
-                      </button>
+
+                    <h2 style={styles.cardTitle}>{item.media_name}</h2>
+                    {item.placement_name && <p style={styles.placement}>{item.placement_name}</p>}
+
+                    <div style={styles.specRow}>
+                      {item.size && <span>📐 {item.size}</span>}
+                      {item.file_format && <span>형식 {item.file_format}</span>}
+                      {item.file_size && <span>용량 {item.file_size}</span>}
                     </div>
-                  </div>
 
-                  <h2 style={styles.cardTitle}>{item.media_name}</h2>
-                  {item.placement_name && <p style={styles.placement}>{item.placement_name}</p>}
+                    {!isExpanded && (
+                      <div style={styles.summaryRow}>
+                        {guideCount > 0 && <span>가이드 {guideCount}개</span>}
+                        {warningCount > 0 && <span>주의 {warningCount}개</span>}
+                        {item.official_link && <span>공식 링크 있음</span>}
+                        {item.psd_path && <span>템플릿 경로 있음</span>}
+                      </div>
+                    )}
 
-                  <div style={styles.specRow}>
-                    {item.size && <span>📐 {item.size}</span>}
-                    {item.file_format && <span>형식 {item.file_format}</span>}
-                    {item.file_size && <span>용량 {item.file_size}</span>}
-                  </div>
+                    {isExpanded && (
+                      <>
+                        {item.example_image_url && (
+                          <div style={styles.imageWrap}>
+                            <a href={item.example_image_url} target="_blank" rel="noreferrer">
+                              <img src={item.example_image_url} alt={`${item.media_name} 예시 이미지`} style={styles.exampleImage} />
+                            </a>
+                          </div>
+                        )}
 
-                  {item.example_image_url && (
-                    <div style={styles.imageWrap}>
-                      <a href={item.example_image_url} target="_blank" rel="noreferrer">
-                        <img src={item.example_image_url} alt={`${item.media_name} 예시 이미지`} style={styles.exampleImage} />
-                      </a>
-                    </div>
-                  )}
+                        {guideCount > 0 && (
+                          <section style={styles.section}>
+                            <h3 style={styles.sectionTitleBlue}>제작 가이드</h3>
+                            <ul style={styles.list}>
+                              {splitLines(item.guide).map((line, idx) => (
+                                <li key={idx}>{line}</li>
+                              ))}
+                            </ul>
+                          </section>
+                        )}
 
-                  {splitLines(item.guide).length > 0 && (
-                    <section style={styles.section}>
-                      <h3 style={styles.sectionTitleBlue}>제작 가이드</h3>
-                      <ul style={styles.list}>
-                        {splitLines(item.guide).map((line, idx) => (
-                          <li key={idx}>{line}</li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
+                        {warningCount > 0 && (
+                          <section style={styles.section}>
+                            <h3 style={styles.sectionTitleRed}>반려 / 주의사항</h3>
+                            <ul style={styles.warningList}>
+                              {splitLines(item.warnings).map((line, idx) => (
+                                <li key={idx}>{line}</li>
+                              ))}
+                            </ul>
+                          </section>
+                        )}
 
-                  {splitLines(item.warnings).length > 0 && (
-                    <section style={styles.section}>
-                      <h3 style={styles.sectionTitleRed}>반려 / 주의사항</h3>
-                      <ul style={styles.warningList}>
-                        {splitLines(item.warnings).map((line, idx) => (
-                          <li key={idx}>{line}</li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
+                        {item.official_link && (
+                          <section style={styles.linkBox}>
+                            <div style={styles.linkLabel}>공식 가이드</div>
+                            {isUrl(item.official_link) ? (
+                              <a href={item.official_link} target="_blank" rel="noreferrer" style={styles.linkText}>
+                                {item.official_link}
+                              </a>
+                            ) : (
+                              <span style={styles.pathText}>{item.official_link}</span>
+                            )}
+                            <button style={styles.copyButton} onClick={() => copyText(item.official_link)}>
+                              복사
+                            </button>
+                          </section>
+                        )}
 
-                  {item.official_link && (
-                    <section style={styles.linkBox}>
-                      <div style={styles.linkLabel}>공식 가이드</div>
-                      {isUrl(item.official_link) ? (
-                        <a href={item.official_link} target="_blank" rel="noreferrer" style={styles.linkText}>
-                          {item.official_link}
-                        </a>
-                      ) : (
-                        <span style={styles.pathText}>{item.official_link}</span>
-                      )}
-                      <button style={styles.copyButton} onClick={() => copyText(item.official_link)}>
-                        복사
-                      </button>
-                    </section>
-                  )}
+                        {item.psd_path && (
+                          <section style={styles.linkBox}>
+                            <div style={styles.linkLabel}>PSD / 템플릿 경로</div>
+                            <span style={styles.pathText}>{item.psd_path}</span>
+                            <button style={styles.copyButton} onClick={() => copyText(item.psd_path)}>
+                              복사
+                            </button>
+                          </section>
+                        )}
 
-                  {item.psd_path && (
-                    <section style={styles.linkBox}>
-                      <div style={styles.linkLabel}>PSD / 템플릿 경로</div>
-                      <span style={styles.pathText}>{item.psd_path}</span>
-                      <button style={styles.copyButton} onClick={() => copyText(item.psd_path)}>
-                        복사
-                      </button>
-                    </section>
-                  )}
+                        {item.work_sample_path && (
+                          <section style={styles.linkBox}>
+                            <div style={styles.linkLabel}>작업 사례 경로</div>
+                            <span style={styles.pathText}>{item.work_sample_path}</span>
+                            <button style={styles.copyButton} onClick={() => copyText(item.work_sample_path)}>
+                              복사
+                            </button>
+                          </section>
+                        )}
 
-                  {item.work_sample_path && (
-                    <section style={styles.linkBox}>
-                      <div style={styles.linkLabel}>작업 사례 경로</div>
-                      <span style={styles.pathText}>{item.work_sample_path}</span>
-                      <button style={styles.copyButton} onClick={() => copyText(item.work_sample_path)}>
-                        복사
-                      </button>
-                    </section>
-                  )}
+                        <div style={styles.meta}>
+                          {item.updated_by && <span>수정자 {item.updated_by}</span>}
+                          {item.updated_at && <span>최종 수정 {new Date(item.updated_at).toLocaleDateString("ko-KR")}</span>}
+                        </div>
 
-                  <div style={styles.meta}>
-                    {item.updated_by && <span>수정자 {item.updated_by}</span>}
-                    {item.updated_at && <span>최종 수정 {new Date(item.updated_at).toLocaleDateString("ko-KR")}</span>}
-                  </div>
-                </article>
-              ))}
+                        <div style={styles.deleteArea}>
+                          <button style={styles.deleteButton} onClick={() => deleteItem(item)}>
+                            삭제
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
@@ -723,12 +758,27 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     gap: 12,
   },
+  badgeArea: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
   badge: {
     display: "inline-block",
     padding: "5px 10px",
     borderRadius: 999,
     background: "#EEF0FF",
     color: "#0114A7",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  imageBadge: {
+    display: "inline-block",
+    padding: "5px 10px",
+    borderRadius: 999,
+    background: "#EAF8F0",
+    color: "#0A8A4E",
     fontSize: 12,
     fontWeight: 800,
   },
@@ -774,6 +824,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: "1px solid #F0F1F5",
     padding: "12px 0",
     marginBottom: 14,
+  },
+  summaryRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    fontSize: 12,
+    color: "#777",
   },
   imageWrap: {
     margin: "10px 0 16px",
@@ -859,6 +916,20 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     fontSize: 11,
     color: "#aaa",
+  },
+  deleteArea: {
+    marginTop: 12,
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+  deleteButton: {
+    border: "1px solid #FFD0D0",
+    background: "#FFF5F5",
+    color: "#C52020",
+    borderRadius: 8,
+    padding: "7px 10px",
+    cursor: "pointer",
+    fontWeight: 800,
   },
   empty: {
     background: "#fff",
