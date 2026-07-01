@@ -613,7 +613,7 @@ export default function App() {
 
 const styles: Record<string, React.CSSProperties> = {
   page: { minHeight: "100vh", background: "#F7F8FC", fontFamily: "'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif", color: "#0D0F1A" },
-  header: { maxWidth: 1180, margin: "0 auto", padding: "28px 24px 70px" },
+  header: { maxWidth: 1180, margin: "0 auto", padding: "24px 24px 28px" },
   title: { fontSize: 28, margin: 0, fontWeight: 800 },
   subtitle: { display: "none" },
   searchArea: { maxWidth: 1180, margin: "0 auto", padding: "0 24px 8px", display: "flex", gap: 10, alignItems: "center" },
@@ -629,6 +629,8 @@ const styles: Record<string, React.CSSProperties> = {
   notice: { color: "#7A6A3A" },
   updateBoard: {
     maxWidth: 1180,
+    width: "calc(100% - 48px)",
+    boxSizing: "border-box",
     margin: "0 auto 12px",
     padding: "16px 18px",
     background: "#FFFBEF",
