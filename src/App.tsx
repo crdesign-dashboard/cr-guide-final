@@ -106,6 +106,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const [updateNoticeOpen, setUpdateNoticeOpen] = useState(false);
+  const [noticeCollapsed, setNoticeCollapsed] = useState(false);
   const updateSignatureRef = useRef("");
 
   async function fetchItems() {
@@ -162,8 +163,15 @@ export default function App() {
   }, [items]);
 
   const recentUpdates = useMemo(() => {
+    const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
     return [...items]
-      .filter((item) => item.updated_at || item.created_at)
+      .filter((item) => {
+        const value = item.updated_at || item.created_at;
+        if (!value) return false;
+        const time = new Date(value).getTime();
+        return !Number.isNaN(time) && time >= oneMonthAgo;
+      })
       .sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at)))
       .slice(0, 3);
   }, [items]);
@@ -384,23 +392,34 @@ export default function App() {
           <h1 style={styles.title}>CR 매체 가이드 허브</h1>
           <p style={styles.subtitle}>기획·디자인팀이 매체별 제작 기준, 공식 가이드, 템플릿 경로, 반려 이슈를 한곳에서 관리하는 전사 가이드 시스템</p>
         </div>
-        <button style={styles.primaryButton} onClick={openCreateModal}>+ 매체 추가</button>
       </header>
 
       <section style={styles.searchArea}>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="매체명, 사이즈, 경로, 주의사항 검색..." style={styles.searchInput} />
-        <button style={styles.secondaryButton} onClick={fetchItems}>새로고침</button>
       </section>
 
       <section style={{ ...styles.updateBoard, ...(updateNoticeOpen ? styles.updateBoardActive : {}) }}>
-        <div style={styles.updateBoardIcon}>📢</div>
-        <div style={styles.updateBoardText}>
-          <strong style={styles.updateBoardTitle}>공지사항</strong>
-          <p style={styles.updateBoardDesc}>
-            {updateNoticeOpen
-              ? "새로운 수정 내용이 있어. 최신 내용 보기 버튼을 눌러 반영해줘."
-              : "매체 가이드가 수정되면 이 영역에서 최근 업데이트 내역을 확인할 수 있어."}
-          </p>
+        <div style={styles.updateBoardHeader}>
+          <div style={styles.updateBoardTitleWrap}>
+            <div style={styles.updateBoardIcon}>📢</div>
+            <div style={styles.updateBoardText}>
+              <strong style={styles.updateBoardTitle}>공지사항</strong>
+              <p style={styles.updateBoardDesc}>
+                {updateNoticeOpen
+                  ? "새로운 수정 내용이 있습니다. 최신 내용 보기 버튼을 눌러 반영해 주세요."
+                  : "매체 가이드가 수정되면 이 영역에서 최근 업데이트 내역을 확인하실 수 있습니다."}
+              </p>
+            </div>
+          </div>
+          <div style={styles.updateBoardActions}>
+            <button style={styles.updateBoardButton} onClick={fetchItems}>최신 내용 보기</button>
+            <button style={styles.foldButton} onClick={() => setNoticeCollapsed((prev) => !prev)}>
+              {noticeCollapsed ? "펼치기" : "접기"}
+            </button>
+          </div>
+        </div>
+
+        {!noticeCollapsed && (
           <div style={styles.recentUpdateList}>
             {recentUpdates.length > 0 ? recentUpdates.map((item) => (
               <div key={item.id || `${item.group_name}-${item.media_name}`} style={styles.recentUpdateItem}>
@@ -409,12 +428,17 @@ export default function App() {
                 {item.updated_by && <span style={styles.recentUpdateBy}>수정자 {item.updated_by}</span>}
               </div>
             )) : (
-              <div style={styles.recentUpdateEmpty}>아직 표시할 업데이트 내역이 없어.</div>
+              <div style={styles.recentUpdateEmpty}>최근 한 달 내 업데이트 내역이 없습니다.</div>
             )}
           </div>
-        </div>
-        <div style={styles.updateBoardActions}>
-          <button style={styles.updateBoardButton} onClick={fetchItems}>최신 내용 보기</button>
+        )}
+      </section>
+
+      <section style={styles.actionArea}>
+        <div style={styles.notice}>Supabase 공용 DB 저장 · 사이트 내 수정 즉시 전사 반영</div>
+        <div style={styles.actionButtons}>
+          <button style={styles.primaryButton} onClick={openCreateModal}>+ 매체 추가</button>
+          <button style={styles.secondaryButton} onClick={fetchItems}>새로고침</button>
         </div>
       </section>
 
@@ -435,7 +459,6 @@ export default function App() {
         <section style={styles.content}>
           <div style={styles.contentHeader}>
             <div><strong>{filteredItems.length}개 매체</strong></div>
-            <div style={styles.notice}>Supabase 공용 DB 저장 · 사이트 내 수정 즉시 전사 반영</div>
           </div>
 
           {loading ? <div style={styles.empty}>불러오는 중...</div> : filteredItems.length === 0 ? <div style={styles.empty}>등록된 매체가 없어. + 매체 추가로 등록해줘.</div> : (
@@ -604,7 +627,7 @@ const styles: Record<string, React.CSSProperties> = {
   header: { maxWidth: 1180, margin: "0 auto", padding: "28px 24px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20 },
   title: { fontSize: 28, margin: 0, fontWeight: 800 },
   subtitle: { margin: "8px 0 0", fontSize: 13, color: "#666" },
-  searchArea: { maxWidth: 1180, margin: "0 auto", padding: "0 24px 24px", display: "flex", gap: 10 },
+  searchArea: { maxWidth: 1180, margin: "0 auto", padding: "0 24px 14px", display: "flex", gap: 10 },
   searchInput: { flex: 1, height: 44, border: "1px solid #DDE1EA", borderRadius: 10, padding: "0 14px", fontSize: 14, outline: "none", background: "#fff" },
   main: { maxWidth: 1180, margin: "0 auto", padding: "0 24px 40px", display: "grid", gridTemplateColumns: "220px 1fr", gap: 18 },
   sidebar: { background: "#fff", border: "1px solid #E5E7EF", borderRadius: 14, padding: 14, height: "fit-content", position: "sticky", top: 16 },
@@ -614,21 +637,21 @@ const styles: Record<string, React.CSSProperties> = {
   groupCount: { color: "#999" },
   content: { minWidth: 0 },
   contentHeader: { marginBottom: 12, display: "flex", justifyContent: "space-between", fontSize: 13, color: "#666" },
-  notice: { color: "#7A6A3A" },
+  notice: { color: "#7A6A3A", fontSize: 13 },
+  actionArea: { maxWidth: 1180, margin: "0 auto 18px", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
+  actionButtons: { display: "flex", gap: 10, alignItems: "center" },
   updateBoard: {
     maxWidth: 1180,
-    margin: "-10px auto 24px",
+    margin: "0 auto 14px",
     padding: "16px 18px",
     background: "#FFFDF1",
     border: "1px solid #EADFA8",
     borderRadius: 14,
-    display: "grid",
-    gridTemplateColumns: "36px 1fr auto",
-    gap: 14,
-    alignItems: "flex-start",
     boxShadow: "0 8px 24px rgba(122,106,58,0.08)",
   },
   updateBoardActive: { background: "#FFF8D9", border: "1px solid #F0C94F" },
+  updateBoardHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14 },
+  updateBoardTitleWrap: { display: "flex", alignItems: "flex-start", gap: 14, minWidth: 0 },
   updateBoardIcon: {
     width: 36,
     height: 36,
@@ -641,12 +664,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 900,
     fontSize: 18,
   },
-  updateBoardText: { minWidth: 0 },
+  updateBoardText: { minWidth: 0, textAlign: "left" },
   updateBoardTitle: { display: "block", fontSize: 15, color: "#4E3A00", marginBottom: 4, fontWeight: 900 },
   updateBoardDesc: { margin: 0, fontSize: 12, lineHeight: 1.5, color: "#7A6A3A" },
   updateBoardActions: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
   updateBoardButton: { border: "none", borderRadius: 10, background: "#0D0F1A", color: "#fff", fontWeight: 900, padding: "10px 12px", cursor: "pointer", whiteSpace: "nowrap" },
-  recentUpdateList: { marginTop: 10, display: "flex", flexDirection: "column", gap: 6 },
+  foldButton: { border: "1px solid #EADFA8", borderRadius: 10, background: "#fff", color: "#7A5B00", fontWeight: 900, padding: "9px 12px", cursor: "pointer", whiteSpace: "nowrap" },
+  recentUpdateList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 6 },
   recentUpdateItem: { display: "grid", gridTemplateColumns: "74px 1fr auto", gap: 8, alignItems: "center", fontSize: 12, color: "#4E3A00", background: "rgba(255,255,255,0.68)", border: "1px solid rgba(234,223,168,0.9)", borderRadius: 10, padding: "8px 10px" },
   recentUpdateDate: { fontWeight: 900, color: "#7A5B00", whiteSpace: "nowrap" },
   recentUpdateName: { fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
