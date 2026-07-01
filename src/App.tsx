@@ -81,6 +81,19 @@ function makeUpdateSignature(items: MediaGuide[]) {
   return `${items.length}:${latestItem?.id || ""}:${latestItem?.updated_at || latestItem?.created_at || ""}`;
 }
 
+function formatKoreanDate(value?: string | null) {
+  if (!value) return "날짜 없음";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "날짜 없음";
+
+  return date.toLocaleString("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function App() {
   const [items, setItems] = useState<MediaGuide[]>([]);
   const [activeGroup, setActiveGroup] = useState("전체");
@@ -139,13 +152,20 @@ export default function App() {
 
   useEffect(() => {
     fetchItems();
-    const intervalId = window.setInterval(checkForUpdates, 30000);
+    const intervalId = window.setInterval(checkForUpdates, 10000);
     return () => window.clearInterval(intervalId);
   }, []);
 
   const groups = useMemo(() => {
     const unique = Array.from(new Set(items.map((item) => item.group_name).filter(Boolean)));
     return ["전체", ...unique];
+  }, [items]);
+
+  const recentUpdates = useMemo(() => {
+    return [...items]
+      .filter((item) => item.updated_at || item.created_at)
+      .sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at)))
+      .slice(0, 3);
   }, [items]);
 
   const filteredItems = useMemo(() => {
@@ -372,19 +392,31 @@ export default function App() {
         <button style={styles.secondaryButton} onClick={fetchItems}>새로고침</button>
       </section>
 
-      {updateNoticeOpen && (
-        <section style={styles.updateBoard}>
-          <div style={styles.updateBoardIcon}>!</div>
-          <div style={styles.updateBoardText}>
-            <strong style={styles.updateBoardTitle}>공지사항 · 새 내용이 업데이트됐어</strong>
-            <p style={styles.updateBoardDesc}>다른 사용자가 매체 가이드를 수정했어. 현재 화면은 이전 내용일 수 있으니 최신 내용으로 다시 불러와줘.</p>
+      <section style={{ ...styles.updateBoard, ...(updateNoticeOpen ? styles.updateBoardActive : {}) }}>
+        <div style={styles.updateBoardIcon}>📢</div>
+        <div style={styles.updateBoardText}>
+          <strong style={styles.updateBoardTitle}>공지사항</strong>
+          <p style={styles.updateBoardDesc}>
+            {updateNoticeOpen
+              ? "새로운 수정 내용이 있어. 최신 내용 보기 버튼을 눌러 반영해줘."
+              : "매체 가이드가 수정되면 이 영역에서 최근 업데이트 내역을 확인할 수 있어."}
+          </p>
+          <div style={styles.recentUpdateList}>
+            {recentUpdates.length > 0 ? recentUpdates.map((item) => (
+              <div key={item.id || `${item.group_name}-${item.media_name}`} style={styles.recentUpdateItem}>
+                <span style={styles.recentUpdateDate}>{formatKoreanDate(item.updated_at || item.created_at)}</span>
+                <span style={styles.recentUpdateName}>{item.group_name} · {item.media_name}</span>
+                {item.updated_by && <span style={styles.recentUpdateBy}>수정자 {item.updated_by}</span>}
+              </div>
+            )) : (
+              <div style={styles.recentUpdateEmpty}>아직 표시할 업데이트 내역이 없어.</div>
+            )}
           </div>
-          <div style={styles.updateBoardActions}>
-            <button style={styles.updateBoardButton} onClick={fetchItems}>최신 내용 보기</button>
-            <button style={styles.updateBoardClose} onClick={() => setUpdateNoticeOpen(false)}>닫기</button>
-          </div>
-        </section>
-      )}
+        </div>
+        <div style={styles.updateBoardActions}>
+          <button style={styles.updateBoardButton} onClick={fetchItems}>최신 내용 보기</button>
+        </div>
+      </section>
 
       <main style={styles.main}>
         <aside style={styles.sidebar}>
@@ -586,19 +618,20 @@ const styles: Record<string, React.CSSProperties> = {
   updateBoard: {
     maxWidth: 1180,
     margin: "-10px auto 24px",
-    padding: "14px 18px",
-    background: "#FFF8D9",
-    border: "1px solid #F0D875",
+    padding: "16px 18px",
+    background: "#FFFDF1",
+    border: "1px solid #EADFA8",
     borderRadius: 14,
     display: "grid",
-    gridTemplateColumns: "32px 1fr auto",
-    gap: 12,
-    alignItems: "center",
+    gridTemplateColumns: "36px 1fr auto",
+    gap: 14,
+    alignItems: "flex-start",
     boxShadow: "0 8px 24px rgba(122,106,58,0.08)",
   },
+  updateBoardActive: { background: "#FFF8D9", border: "1px solid #F0C94F" },
   updateBoardIcon: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: 999,
     background: "#FFE889",
     color: "#7A5B00",
@@ -606,13 +639,19 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     fontWeight: 900,
+    fontSize: 18,
   },
   updateBoardText: { minWidth: 0 },
-  updateBoardTitle: { display: "block", fontSize: 14, color: "#4E3A00", marginBottom: 3 },
+  updateBoardTitle: { display: "block", fontSize: 15, color: "#4E3A00", marginBottom: 4, fontWeight: 900 },
   updateBoardDesc: { margin: 0, fontSize: 12, lineHeight: 1.5, color: "#7A6A3A" },
   updateBoardActions: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
   updateBoardButton: { border: "none", borderRadius: 10, background: "#0D0F1A", color: "#fff", fontWeight: 900, padding: "10px 12px", cursor: "pointer", whiteSpace: "nowrap" },
-  updateBoardClose: { border: "1px solid #E2C75F", borderRadius: 10, background: "#FFFDF1", color: "#7A5B00", fontWeight: 800, padding: "9px 10px", cursor: "pointer" },
+  recentUpdateList: { marginTop: 10, display: "flex", flexDirection: "column", gap: 6 },
+  recentUpdateItem: { display: "grid", gridTemplateColumns: "74px 1fr auto", gap: 8, alignItems: "center", fontSize: 12, color: "#4E3A00", background: "rgba(255,255,255,0.68)", border: "1px solid rgba(234,223,168,0.9)", borderRadius: 10, padding: "8px 10px" },
+  recentUpdateDate: { fontWeight: 900, color: "#7A5B00", whiteSpace: "nowrap" },
+  recentUpdateName: { fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  recentUpdateBy: { color: "#8A7A4A", whiteSpace: "nowrap" },
+  recentUpdateEmpty: { fontSize: 12, color: "#8A7A4A", background: "rgba(255,255,255,0.68)", border: "1px dashed rgba(234,223,168,0.9)", borderRadius: 10, padding: "8px 10px" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 14 },
   card: { background: "#fff", border: "1px solid #E5E7EF", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(13,15,26,0.04)" },
   cardTop: { display: "flex", justifyContent: "space-between", gap: 12 },
