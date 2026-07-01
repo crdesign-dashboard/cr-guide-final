@@ -81,19 +81,6 @@ function makeUpdateSignature(items: MediaGuide[]) {
   return `${items.length}:${latestItem?.id || ""}:${latestItem?.updated_at || latestItem?.created_at || ""}`;
 }
 
-function formatKoreanDate(value?: string | null) {
-  if (!value) return "날짜 없음";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "날짜 없음";
-
-  return date.toLocaleString("ko-KR", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export default function App() {
   const [items, setItems] = useState<MediaGuide[]>([]);
   const [activeGroup, setActiveGroup] = useState("전체");
@@ -153,27 +140,13 @@ export default function App() {
 
   useEffect(() => {
     fetchItems();
-    const intervalId = window.setInterval(checkForUpdates, 10000);
+    const intervalId = window.setInterval(checkForUpdates, 30000);
     return () => window.clearInterval(intervalId);
   }, []);
 
   const groups = useMemo(() => {
     const unique = Array.from(new Set(items.map((item) => item.group_name).filter(Boolean)));
     return ["전체", ...unique];
-  }, [items]);
-
-  const recentUpdates = useMemo(() => {
-    const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-    return [...items]
-      .filter((item) => {
-        const value = item.updated_at || item.created_at;
-        if (!value) return false;
-        const time = new Date(value).getTime();
-        return !Number.isNaN(time) && time >= oneMonthAgo;
-      })
-      .sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at)))
-      .slice(0, 3);
   }, [items]);
 
   const filteredItems = useMemo(() => {
@@ -198,6 +171,35 @@ export default function App() {
       return groupMatched && searchMatched;
     });
   }, [items, activeGroup, search]);
+
+  const recentUpdates = useMemo(() => {
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    return [...items]
+      .filter((item) => {
+        const dateValue = item.updated_at || item.created_at;
+        if (!dateValue) return false;
+        return new Date(dateValue) >= oneMonthAgo;
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+        const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+        return bTime - aTime;
+      })
+      .slice(0, 3);
+  }, [items]);
+
+  function formatNoticeDate(value?: string) {
+    if (!value) return "";
+    return new Date(value).toLocaleString("ko-KR", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
 
   function isCardOpen(item: MediaGuide) {
     if (!item.id) return false;
@@ -388,58 +390,45 @@ export default function App() {
   return (
     <div style={styles.page}>
       <header style={styles.header}>
-        <div>
-          <h1 style={styles.title}>CR 매체 가이드 허브</h1>
-          <p style={styles.subtitle}>기획·디자인팀이 매체별 제작 기준, 공식 가이드, 템플릿 경로, 반려 이슈를 한곳에서 관리하는 전사 가이드 시스템</p>
-        </div>
+        <h1 style={styles.title}>CR 매체 가이드 허브</h1>
       </header>
 
-      <section style={styles.searchArea}>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="매체명, 사이즈, 경로, 주의사항 검색..." style={styles.searchInput} />
-      </section>
-
-      <section style={{ ...styles.updateBoard, ...(updateNoticeOpen ? styles.updateBoardActive : {}) }}>
+      <section style={styles.updateBoard}>
         <div style={styles.updateBoardHeader}>
-          <div style={styles.updateBoardTitleWrap}>
-            <div style={styles.updateBoardIcon}>📢</div>
-            <div style={styles.updateBoardText}>
-              <strong style={styles.updateBoardTitle}>공지사항</strong>
-              <p style={styles.updateBoardDesc}>
-                {updateNoticeOpen
-                  ? "새로운 수정 내용이 있습니다. 최신 내용 보기 버튼을 눌러 반영해 주세요."
-                  : "매체 가이드가 수정되면 이 영역에서 최근 업데이트 내역을 확인하실 수 있습니다."}
-              </p>
-            </div>
+          <div style={styles.updateBoardIcon}>📣</div>
+          <div style={styles.updateBoardText}>
+            <strong style={styles.updateBoardTitle}>공지사항</strong>
+            <p style={styles.updateBoardDesc}>매체 가이드가 수정되면 이 영역에서 최근 업데이트 내역을 확인하실 수 있습니다.</p>
           </div>
-          <div style={styles.updateBoardActions}>
-            <button style={styles.updateBoardButton} onClick={fetchItems}>최신 내용 보기</button>
-            <button style={styles.foldButton} onClick={() => setNoticeCollapsed((prev) => !prev)}>
-              {noticeCollapsed ? "펼치기" : "접기"}
-            </button>
-          </div>
+          <button
+            style={styles.updateBoardToggle}
+            onClick={() => setNoticeCollapsed((prev) => !prev)}
+            aria-label={noticeCollapsed ? "공지사항 펼치기" : "공지사항 접기"}
+          >
+            {noticeCollapsed ? "▼" : "▲"}
+          </button>
         </div>
 
         {!noticeCollapsed && (
-          <div style={styles.recentUpdateList}>
-            {recentUpdates.length > 0 ? recentUpdates.map((item) => (
-              <div key={item.id || `${item.group_name}-${item.media_name}`} style={styles.recentUpdateItem}>
-                <span style={styles.recentUpdateDate}>{formatKoreanDate(item.updated_at || item.created_at)}</span>
-                <span style={styles.recentUpdateName}>{item.group_name} · {item.media_name}</span>
-                {item.updated_by && <span style={styles.recentUpdateBy}>수정자 {item.updated_by}</span>}
-              </div>
-            )) : (
-              <div style={styles.recentUpdateEmpty}>최근 한 달 내 업데이트 내역이 없습니다.</div>
-            )}
-          </div>
+          <>
+            <div style={styles.updateList}>
+              {recentUpdates.length === 0 ? (
+                <div style={styles.updateEmpty}>최근 1개월 이내의 업데이트 내역이 없습니다.</div>
+              ) : recentUpdates.map((item) => (
+                <div key={item.id || `${item.group_name}-${item.media_name}`} style={styles.updateItem}>
+                  <span style={styles.updateDate}>{formatNoticeDate(item.updated_at || item.created_at)}</span>
+                  <strong style={styles.updateName}>{item.group_name} · {item.media_name}</strong>
+                </div>
+              ))}
+            </div>
+            <div style={styles.updateBoardFoot}>ⓘ 최근 1개월 이내의 업데이트 내역만 표시됩니다. (1개월 이후 자동 삭제)</div>
+          </>
         )}
       </section>
 
-      <section style={styles.actionArea}>
-        <div style={styles.notice}>Supabase 공용 DB 저장 · 사이트 내 수정 즉시 전사 반영</div>
-        <div style={styles.actionButtons}>
-          <button style={styles.primaryButton} onClick={openCreateModal}>+ 매체 추가</button>
-          <button style={styles.secondaryButton} onClick={fetchItems}>새로고침</button>
-        </div>
+      <section style={styles.searchArea}>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="매체명, 사이즈, 경로, 주의사항 검색..." style={styles.searchInput} />
+        <button style={styles.primaryButton} onClick={openCreateModal}>+ 매체 추가</button>
       </section>
 
       <main style={styles.main}>
@@ -624,11 +613,11 @@ export default function App() {
 
 const styles: Record<string, React.CSSProperties> = {
   page: { minHeight: "100vh", background: "#F7F8FC", fontFamily: "'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif", color: "#0D0F1A" },
-  header: { maxWidth: 1180, margin: "0 auto", padding: "28px 24px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20 },
+  header: { maxWidth: 1180, margin: "0 auto", padding: "28px 24px 70px" },
   title: { fontSize: 28, margin: 0, fontWeight: 800 },
-  subtitle: { margin: "8px 0 0", fontSize: 13, color: "#666" },
-  searchArea: { maxWidth: 1180, margin: "0 auto", padding: "0 24px 14px", display: "flex", gap: 10 },
-  searchInput: { flex: 1, height: 44, border: "1px solid #DDE1EA", borderRadius: 10, padding: "0 14px", fontSize: 14, outline: "none", background: "#fff" },
+  subtitle: { display: "none" },
+  searchArea: { maxWidth: 1180, margin: "0 auto", padding: "0 24px 8px", display: "flex", gap: 10, alignItems: "center" },
+  searchInput: { flex: 1, height: 44, border: "1px solid #DDE1EA", borderRadius: 10, padding: "0 14px", fontSize: 14, outline: "none", background: "#fff", minWidth: 0 },
   main: { maxWidth: 1180, margin: "0 auto", padding: "0 24px 40px", display: "grid", gridTemplateColumns: "220px 1fr", gap: 18 },
   sidebar: { background: "#fff", border: "1px solid #E5E7EF", borderRadius: 14, padding: 14, height: "fit-content", position: "sticky", top: 16 },
   sidebarTitle: { fontSize: 12, fontWeight: 800, color: "#888", marginBottom: 10 },
@@ -637,21 +626,17 @@ const styles: Record<string, React.CSSProperties> = {
   groupCount: { color: "#999" },
   content: { minWidth: 0 },
   contentHeader: { marginBottom: 12, display: "flex", justifyContent: "space-between", fontSize: 13, color: "#666" },
-  notice: { color: "#7A6A3A", fontSize: 13 },
-  actionArea: { maxWidth: 1180, margin: "0 auto 18px", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  actionButtons: { display: "flex", gap: 10, alignItems: "center" },
+  notice: { color: "#7A6A3A" },
   updateBoard: {
     maxWidth: 1180,
-    margin: "0 auto 14px",
+    margin: "0 auto 12px",
     padding: "16px 18px",
-    background: "#FFFDF1",
-    border: "1px solid #EADFA8",
+    background: "#FFFBEF",
+    border: "1px solid #F0D875",
     borderRadius: 14,
-    boxShadow: "0 8px 24px rgba(122,106,58,0.08)",
+    boxShadow: "0 8px 24px rgba(122,106,58,0.06)",
   },
-  updateBoardActive: { background: "#FFF8D9", border: "1px solid #F0C94F" },
-  updateBoardHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14 },
-  updateBoardTitleWrap: { display: "flex", alignItems: "flex-start", gap: 14, minWidth: 0 },
+  updateBoardHeader: { display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center" },
   updateBoardIcon: {
     width: 36,
     height: 36,
@@ -664,18 +649,19 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 900,
     fontSize: 18,
   },
-  updateBoardText: { minWidth: 0, textAlign: "left" },
-  updateBoardTitle: { display: "block", fontSize: 15, color: "#4E3A00", marginBottom: 4, fontWeight: 900 },
+  updateBoardText: { minWidth: 0 },
+  updateBoardTitle: { display: "block", fontSize: 15, color: "#2F2500", marginBottom: 4, fontWeight: 900 },
   updateBoardDesc: { margin: 0, fontSize: 12, lineHeight: 1.5, color: "#7A6A3A" },
-  updateBoardActions: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
-  updateBoardButton: { border: "none", borderRadius: 10, background: "#0D0F1A", color: "#fff", fontWeight: 900, padding: "10px 12px", cursor: "pointer", whiteSpace: "nowrap" },
-  foldButton: { border: "1px solid #EADFA8", borderRadius: 10, background: "#fff", color: "#7A5B00", fontWeight: 900, padding: "9px 12px", cursor: "pointer", whiteSpace: "nowrap" },
-  recentUpdateList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 6 },
-  recentUpdateItem: { display: "grid", gridTemplateColumns: "74px 1fr auto", gap: 8, alignItems: "center", fontSize: 12, color: "#4E3A00", background: "rgba(255,255,255,0.68)", border: "1px solid rgba(234,223,168,0.9)", borderRadius: 10, padding: "8px 10px" },
-  recentUpdateDate: { fontWeight: 900, color: "#7A5B00", whiteSpace: "nowrap" },
-  recentUpdateName: { fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  recentUpdateBy: { color: "#8A7A4A", whiteSpace: "nowrap" },
-  recentUpdateEmpty: { fontSize: 12, color: "#8A7A4A", background: "rgba(255,255,255,0.68)", border: "1px dashed rgba(234,223,168,0.9)", borderRadius: 10, padding: "8px 10px" },
+  updateBoardToggle: { width: 34, height: 34, border: "1px solid #E2C75F", borderRadius: 8, background: "#FFFDF1", color: "#7A5B00", fontWeight: 900, cursor: "pointer" },
+  updateList: { marginTop: 14, display: "flex", flexDirection: "column", gap: 0 },
+  updateItem: { minHeight: 38, border: "1px solid #F0D875", borderRadius: 8, background: "rgba(255,255,255,0.58)", display: "grid", gridTemplateColumns: "220px 1fr", alignItems: "center", padding: "0 14px", marginTop: -1, fontSize: 13, color: "#4E3A00" },
+  updateDate: { fontWeight: 800 },
+  updateName: { textAlign: "center", fontWeight: 900 },
+  updateEmpty: { minHeight: 38, border: "1px dashed #E2C75F", borderRadius: 8, display: "flex", alignItems: "center", padding: "0 14px", fontSize: 13, color: "#7A6A3A" },
+  updateBoardFoot: { marginTop: 10, fontSize: 12, color: "#7A6A3A" },
+  updateBoardActions: { display: "none" },
+  updateBoardButton: { display: "none" },
+  updateBoardClose: { display: "none" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 14 },
   card: { background: "#fff", border: "1px solid #E5E7EF", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(13,15,26,0.04)" },
   cardTop: { display: "flex", justifyContent: "space-between", gap: 12 },
@@ -772,7 +758,7 @@ const styles: Record<string, React.CSSProperties> = {
   deleteRow: { marginTop: 12, display: "flex", justifyContent: "flex-end" },
   deleteButton: { border: "1px solid #FFD5D5", background: "#FFF5F5", color: "#D62F2F", borderRadius: 8, padding: "7px 10px", fontWeight: 800, cursor: "pointer" },
   empty: { background: "#fff", border: "1px dashed #DDE1EA", borderRadius: 14, padding: 40, textAlign: "center", color: "#888" },
-  primaryButton: { border: "none", borderRadius: 10, background: "#0114A7", color: "#fff", fontWeight: 900, padding: "12px 18px", cursor: "pointer" },
+  primaryButton: { border: "none", borderRadius: 10, background: "#0114A7", color: "#fff", fontWeight: 900, padding: "0 22px", height: 44, cursor: "pointer", whiteSpace: "nowrap" },
   secondaryButton: { border: "1px solid #DDE1EA", borderRadius: 10, background: "#fff", color: "#333", fontWeight: 800, padding: "12px 16px", cursor: "pointer" },
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1000 },
   modal: { width: "min(860px, 100%)", maxHeight: "90vh", overflowY: "auto", background: "#fff", borderRadius: 18, padding: 22, boxShadow: "0 30px 80px rgba(0,0,0,0.25)" },
