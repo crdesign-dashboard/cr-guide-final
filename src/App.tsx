@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -73,6 +73,14 @@ function copyText(value?: string | null) {
   alert("복사했어!");
 }
 
+function makeUpdateSignature(items: MediaGuide[]) {
+  const latestItem = [...items]
+    .filter((item) => item.updated_at || item.created_at)
+    .sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at)))[0];
+
+  return `${items.length}:${latestItem?.id || ""}:${latestItem?.updated_at || latestItem?.created_at || ""}`;
+}
+
 export default function App() {
   const [items, setItems] = useState<MediaGuide[]>([]);
   const [activeGroup, setActiveGroup] = useState("전체");
@@ -84,6 +92,8 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  const [updateNoticeOpen, setUpdateNoticeOpen] = useState(false);
+  const updateSignatureRef = useRef("");
 
   async function fetchItems() {
     setLoading(true);
@@ -97,13 +107,40 @@ export default function App() {
       console.error(error);
       alert("데이터를 불러오지 못했어. Supabase 설정을 확인해줘.");
     } else {
-      setItems(data || []);
+      const nextItems = data || [];
+      updateSignatureRef.current = makeUpdateSignature(nextItems);
+      setItems(nextItems);
+      setUpdateNoticeOpen(false);
     }
     setLoading(false);
   }
 
+  async function checkForUpdates() {
+    if (!updateSignatureRef.current) return;
+
+    const { data, error, count } = await supabase
+      .from("media_guides")
+      .select("id, updated_at, created_at", { count: "exact" })
+      .order("updated_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false, nullsFirst: false })
+      .limit(1);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const latest = data?.[0];
+    const nextSignature = `${count ?? 0}:${latest?.id || ""}:${latest?.updated_at || latest?.created_at || ""}`;
+    if (nextSignature && nextSignature !== updateSignatureRef.current) {
+      setUpdateNoticeOpen(true);
+    }
+  }
+
   useEffect(() => {
     fetchItems();
+    const intervalId = window.setInterval(checkForUpdates, 30000);
+    return () => window.clearInterval(intervalId);
   }, []);
 
   const groups = useMemo(() => {
@@ -335,6 +372,20 @@ export default function App() {
         <button style={styles.secondaryButton} onClick={fetchItems}>새로고침</button>
       </section>
 
+      {updateNoticeOpen && (
+        <section style={styles.updateBoard}>
+          <div style={styles.updateBoardIcon}>!</div>
+          <div style={styles.updateBoardText}>
+            <strong style={styles.updateBoardTitle}>공지사항 · 새 내용이 업데이트됐어</strong>
+            <p style={styles.updateBoardDesc}>다른 사용자가 매체 가이드를 수정했어. 현재 화면은 이전 내용일 수 있으니 최신 내용으로 다시 불러와줘.</p>
+          </div>
+          <div style={styles.updateBoardActions}>
+            <button style={styles.updateBoardButton} onClick={fetchItems}>최신 내용 보기</button>
+            <button style={styles.updateBoardClose} onClick={() => setUpdateNoticeOpen(false)}>닫기</button>
+          </div>
+        </section>
+      )}
+
       <main style={styles.main}>
         <aside style={styles.sidebar}>
           <div style={styles.sidebarTitle}>매체 그룹</div>
@@ -532,6 +583,36 @@ const styles: Record<string, React.CSSProperties> = {
   content: { minWidth: 0 },
   contentHeader: { marginBottom: 12, display: "flex", justifyContent: "space-between", fontSize: 13, color: "#666" },
   notice: { color: "#7A6A3A" },
+  updateBoard: {
+    maxWidth: 1180,
+    margin: "-10px auto 24px",
+    padding: "14px 18px",
+    background: "#FFF8D9",
+    border: "1px solid #F0D875",
+    borderRadius: 14,
+    display: "grid",
+    gridTemplateColumns: "32px 1fr auto",
+    gap: 12,
+    alignItems: "center",
+    boxShadow: "0 8px 24px rgba(122,106,58,0.08)",
+  },
+  updateBoardIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    background: "#FFE889",
+    color: "#7A5B00",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 900,
+  },
+  updateBoardText: { minWidth: 0 },
+  updateBoardTitle: { display: "block", fontSize: 14, color: "#4E3A00", marginBottom: 3 },
+  updateBoardDesc: { margin: 0, fontSize: 12, lineHeight: 1.5, color: "#7A6A3A" },
+  updateBoardActions: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
+  updateBoardButton: { border: "none", borderRadius: 10, background: "#0D0F1A", color: "#fff", fontWeight: 900, padding: "10px 12px", cursor: "pointer", whiteSpace: "nowrap" },
+  updateBoardClose: { border: "1px solid #E2C75F", borderRadius: 10, background: "#FFFDF1", color: "#7A5B00", fontWeight: 800, padding: "9px 10px", cursor: "pointer" },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 14 },
   card: { background: "#fff", border: "1px solid #E5E7EF", borderRadius: 16, padding: 18, boxShadow: "0 8px 24px rgba(13,15,26,0.04)" },
   cardTop: { display: "flex", justifyContent: "space-between", gap: 12 },
